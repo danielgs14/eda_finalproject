@@ -18,14 +18,16 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-### Part II, Final Assignment
+# Final Assignment
 This is the second assingment for the Ecological Data Analysis in R course. In order to start, packages and functions will be loaded first.
+We'll use _tidiverse_, _dplyr_, _vegan_, _viridis_ and a customized function that will be available in the repository.
 ```{r, include=FALSE}
 library(tidyverse)
 library(dplyr)
 library(vegan)
 library(viridis)
-source("./functions/6003Functions.R")
+#source("./functions/6003Functions.R")
+source("D:/UABC/II_Semestre/Datos_R/eda_finalproject/functions/6003Functions.R") #this one's for knitting of document
 ```
 
 ## Loading data and tidying it up.
@@ -33,21 +35,22 @@ source("./functions/6003Functions.R")
 Here, steps for tidying the dataset will be presented. Raw data was taken during completion of underwater transects, then input in Excel. Data will be imported as a .csv file.  
 
 ```{r}
-df <- read.csv("./data/df_daniel.csv")
+#df <- read.csv("./data/df_daniel.csv")
+df <- read.csv("D:/UABC/II_Semestre/Datos_R/eda_finalproject/data/df_daniel.csv") #this one's for knitting of document
+
 # We'll only need provinces, localities, sites, transects, species and abundances
 df <- df %>% select(province, locality, siteref, transect, sp, length, abundance)
 
 head(df, n=3L)
 tail(df, n=3L)
 str(df)
-
 ```
 
-#Before continuing, let's remember our question: will there be a difference between communities of two provinces with different fishing pressures?
+Before continuing, let's remember our question: will there be a difference between communities of two provinces with different fishing pressures?
 
 ## Data Exploration
-# 1. Outliers 
-```{r, include=FALSE}
+### 1. Outliers 
+```{r}
 boxplot(df$length)
 boxplot(df$abundance)
 
@@ -56,19 +59,17 @@ dotchart(df$abundance)
 ```
 Not that uncommon to see abundances represented like that, I think. Lot's of zeroes and some outliers for abundance and no errors regarding length.
 
-# 2. Homogeneity of variance 
-
+### 2. Homogeneity of variance 
 ```{r}
 p <- ggplot(data=df, aes(X=province, y=length)) +
   geom_boxplot() + facet_wrap(~siteref)
 p
-p<- ggplot(data=df, aes(X=SitioCodigo, y=Densidad_.org.m2.)) +
+p<- ggplot(data=df, aes(X=province, y=abundance)) +
   geom_boxplot() + facet_wrap(~siteref)
 p
 ```
 
-# 3. Normality 
-
+### 3. Normality 
 ```{r, include=FALSE}
 hist(df$length)
 hist(df$abundance)
@@ -82,8 +83,7 @@ qqline(df$abundance)
 
 Data is not normal, as seen in histograms and confirmed by Q-Q plots.
 
-# 4. Zeroes 
-
+### 4. Zeroes 
 ```{r}
 range(df$length)
 plot(table(df$length))
@@ -95,8 +95,7 @@ plot(df$abundance)
 
 There are lots of zeroes for abundance, which we'll have to take into account when analyzing data.
 
-
-# 5. Collinearity X
+### 5. Collinearity X
 ```{r}
 pairs(~ province + locality + siteref + transect + length + abundance, 
       lower.panel=panel.smooth, upper.panel=panel.cor, 
@@ -112,16 +111,15 @@ plot(abundance ~ locality, data=df)
 plot(abundance ~ siteref, data=df)
 plot(length ~ transect, data=df)
 
-#We'll try to take only into account province as x variable and length or abundance as y variables
-pairs(~ province+ length + abundance, 
+pairs(~ province+locality+siteref+transect+abundance, 
       lower.panel=panel.smooth, upper.panel=panel.cor, 
       data=df) 
 
 ```
 
-Our X variable will now be province, being length or abundance our y variable
+We'll take into account province, locality, site and transects as x variables and abundance as y variables; our question does not requires us to study length, so it's something we could have dropped before. We'll still explore it for the sake of it.
 
-# 6. Relationships X and Y
+### 6. Relationships X and Y
 ```{r}
 p <- ggplot(df, aes(x=province, y=length)) +
   geom_boxplot()
@@ -133,35 +131,49 @@ p
 ```
 
 
-# 7. Interactions
-
+### 7. Interactions
 ```{r}
-
 coplot(length ~ abundance | province ,
        data=df,
        panel=function(x,y,...) {
          panel.smooth(x,y,span=0.8,iter=5,...)
          abline(lm(y ~ x), col="blue") } )
+
+coplot(length ~ abundance | locality ,
+       data=df,
+       panel=function(x,y,...) {
+         panel.smooth(x,y,span=0.8,iter=5,...)
+         abline(lm(y ~ x), col="blue") } )
+
+coplot(length ~ abundance | siteref ,
+       data=df,
+       panel=function(x,y,...) {
+         panel.smooth(x,y,span=0.8,iter=5,...)
+         abline(lm(y ~ x), col="blue") } )
+
+#coplot(length ~ abundance | transect ,
+#       data=df,
+#       panel=function(x,y,...) {
+#         panel.smooth(x,y,span=0.8,iter=5,...)
+#         abline(lm(y ~ x), col="blue") } )
+
 ```
-There seems to be no interaction in Provinces. 
 
-# 8. Independence of Y
-Both length and density could be dependent on Province because of fishing pressure effects. 
+There seems to be no interaction. 
 
+### 8. Independence of Y
+Both length and density could be dependent on province, locality, site because of fishing pressure effects. In transects, I'd say there could be independence.
 
 ## Indices
-# Data setup
+### Data setup
 We'll need to create an abundance matrix in order to calculate indices.
+Let's create a dataframe for our indices.
 
 ```{r}
 #Let's create a dataframe for our indices.
 #We only need abundance
 
-# first, we'll summarise species disregarding length
-# we'll use two different matrices: one for species and one for taxa
-# not all organisms were identified to species level
-# taxa for invertebrates is ranked down to class, subclass or order. for fish, taxa equals family.
- 
+# first, we'll summarise species disregarding length 
 df_sp <- df %>% select(province, locality, siteref, transect, sp, abundance)
 head(df_sp)
 str(df_sp)
@@ -182,7 +194,7 @@ ab_sp[is.na(ab_sp)] <-0
 
 ```
 
-# Now we can obtain ecological indices
+Now we can obtain ecological indices
 ```{r}
 #We'll create a dataframe to store our results
 ind_sp <- ab_sp[, c("province", "locality", "siteref", "transect")]
@@ -194,6 +206,7 @@ ind_sp$richness <- rowSums(ab_sp>0)
 ind_sp$Shannon <- diversity(ab_sp) 
 
 # Rarefaction
+raremax <- min(rowSums(ab_sp>0))
 ind_sp$Rarefied <- c(rarefy(ab_sp[1:35,], sample=raremax))
 raremax <- min(rowSums(ab_sp>0))
 
@@ -202,8 +215,7 @@ raremax <- min(rowSums(ab_sp>0))
 rarecurve(ab_sp, sample = raremax, col=viridis(raremax, alpha = 1, begin = 0, end = 1, direction = 1, option = "D"), lwd=2.7)
 ```
 
-
-# Visualization!
+### Visualization
 We'll use boxplots to see  differences in species diversity:
 
 ```{r}
@@ -225,7 +237,9 @@ boxplot(Rarefied~siteref, data=ind_sp, boxwex=0.5, col=viridis(35),
 mfrow=c(1,1)
 ```
 
-## Some linear modeling
+Looks like there are "some" differences, so let's explore them.
+
+### Linear modeling of indices
 
 It appears that species diversity increases as we move from the field to the forest. We can test for differences among habitats statistically using a linear model, with Habitat as a predictor of species diversity:
 
@@ -233,19 +247,50 @@ It appears that species diversity increases as we move from the field to the for
 # fit linear models (ANOVA)
 mod.richness.province <- lm(richness~province, data=ind_sp)
 mod.richness.siteref <- lm(richness~siteref, data=ind_sp)
+mod.richness.transect <- lm(richness~transect, data=ind_sp)
 
-mod.Shannon.province <- lm(richness~province, data=ind_sp)
-mod.Shannon.siteref <- lm(richness~siteref, data=ind_sp)
+mod.Shannon.province <- lm(Shannon~province, data=ind_sp)
+mod.Shannon.siteref <- lm(Shannon~siteref, data=ind_sp)
+mod.Shannon.transect <- lm(Shannon~transect, data=ind_sp)
 
-mod.Rarefied.province <- lm(richness~province, data=ind_sp)
-mod.Rarefied.siteref <- lm(richness~siteref, data=ind_sp)
+mod.Rarefied.province <- lm(Rarefied~province, data=ind_sp)
+mod.Rarefied.siteref <- lm(Rarefied~siteref, data=ind_sp)
+mod.Rarefied.transect <- lm(Rarefied~transect, data=ind_sp)
 
 anova(mod.richness.province)
 anova(mod.richness.siteref) 
+anova(mod.richness.transect)
+#Results show no significant differences
 
 anova(mod.Shannon.province)
 anova(mod.Shannon.siteref) 
+anova(mod.Shannon.transect)
+#There are significant differences for each one 
 
 anova(mod.Rarefied.province)
 anova(mod.Rarefied.siteref)
-``
+anova(mod.Rarefied.transect)
+#Same!
+
+#Should we compare between groups? Let's try a Tukey test. Also, I'm really not sure what am I doing but I think I'm going in the right direction... right?
+#Tukey for Shannon
+TukeyHSD(aov(lm(Shannon~as.factor(siteref), data = ind_sp)), conf.level = 0.95)
+
+#Differences for  site1-4, site1-5, site2-4, site2-5 and almost site5-6
+
+#Tukey for Rarefied richness
+TukeyHSD(aov(lm(Rarefied~as.factor(siteref), data = ind_sp)), conf.level = 0.95)
+
+#Differeces for site 1-4, site1-5, site2-4, site2-5, site3-5 and almost site5-6
+
+```
+
+### Interpretation
+Results of ANOVA show no significant difference for richness, but does show it for Shannon and rarefied species richness. Seems like there's no association between province/site and species richness, but it is for Shannon's diversity index and rarefied richness.
+
+Should we go on? Yes! Well... Seems like my data won't allow me to continue, if I'm not mistaken. I was considering doing an ordination analysis to determine which sites were similar and what species share distribution in provinces, sites and/or transects. I'd need to dampen data from abundances and divide it by ...? I don't know. So I'll leave it up to here. 
+
+Based on what I have, the answer to my question would be that there's evidence -based on my analysis- that differences in species composition could be explained by the location, site or transect. Based on Tukey test, there are some differences between provinces: sites 1-3 correspond to Puntarenas, the high fishing pressure province, and 4-7 to Guanacaste, the not-so-high fishing pressure province. 
+
+## Acknowledgement
+Luis, I'd like to thank you for your effort, patience and dedication given to this course and us. I'm deeply grateful I got into it. I've learned a lot and have also improved some practices that I didn't know were not so great. Data exploration has been (and will continue to be) really useful to me, and will be fundamental for each research project. Thank you, Luis! You're a great professor and a remarkable human being, even if we have only shared a few months. 
