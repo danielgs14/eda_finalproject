@@ -24,7 +24,7 @@ This is the second assingment for the Ecological Data Analysis in R course. In o
 library(tidyverse)
 library(dplyr)
 library(vegan)
-library(viridis) #just in case. For ggplot, use scale_color_viridis() and scale_fill_viridis() magma, plasma, inferno, viridis
+library(viridis)
 source("./functions/6003Functions.R")
 ```
 
@@ -34,72 +34,218 @@ Here, steps for tidying the dataset will be presented. Raw data was taken during
 
 ```{r}
 df <- read.csv("./data/df_daniel.csv")
-df1 <- read.csv("D:/UABC/II_Semestre/Datos_R/backup_project/data/apoyo.csv")
+# We'll only need provinces, localities, sites, transects, species and abundances
+df <- df %>% select(province, locality, siteref, transect, sp, length, abundance)
 
-
-#df contains data for analysis
-head(df)
-tail(df)
+head(df, n=3L)
+tail(df, n=3L)
 str(df)
+
+```
+
+#Before continuing, let's remember our question: will there be a difference between communities of two provinces with different fishing pressures?
+
+## Data Exploration
+# 1. Outliers 
+```{r, include=FALSE}
+boxplot(df$length)
+boxplot(df$abundance)
+
+dotchart(df$length)
+dotchart(df$abundance)
+```
+Not that uncommon to see abundances represented like that, I think. Lot's of zeroes and some outliers for abundance and no errors regarding length.
+
+# 2. Homogeneity of variance 
+
+```{r}
+p <- ggplot(data=df, aes(X=province, y=length)) +
+  geom_boxplot() + facet_wrap(~siteref)
+p
+p<- ggplot(data=df, aes(X=SitioCodigo, y=Densidad_.org.m2.)) +
+  geom_boxplot() + facet_wrap(~siteref)
+p
+```
+
+# 3. Normality 
+
+```{r, include=FALSE}
+hist(df$length)
+hist(df$abundance)
+
+qqnorm(df$length)
+qqline(df$length)
+
+qqnorm(df$abundance)
+qqline(df$abundance)
+```
+
+Data is not normal, as seen in histograms and confirmed by Q-Q plots.
+
+# 4. Zeroes 
+
+```{r}
+range(df$length)
+plot(table(df$length))
+
 range(df$abundance)
+plot(df$abundance)
+
+```
+
+There are lots of zeroes for abundance, which we'll have to take into account when analyzing data.
 
 
-# ab_matrix contains abundance matrix for ecological indices
-# we'll create it out of df; as we don't care for sizes, we'll sum all abundances for each species on for province, site and transect
+# 5. Collinearity X
+```{r}
+pairs(~ province + locality + siteref + transect + length + abundance, 
+      lower.panel=panel.smooth, upper.panel=panel.cor, 
+      data=df) 
+
+plot(length ~ province, data=df)
+plot(length ~ locality, data=df)
+plot(length ~ siteref, data=df)
+plot(length ~ transect, data=df)
+
+plot(abundance ~ province, data=df)
+plot(abundance ~ locality, data=df)
+plot(abundance ~ siteref, data=df)
+plot(length ~ transect, data=df)
+
+#We'll try to take only into account province as x variable and length or abundance as y variables
+pairs(~ province+ length + abundance, 
+      lower.panel=panel.smooth, upper.panel=panel.cor, 
+      data=df) 
+
+```
+
+Our X variable will now be province, being length or abundance our y variable
+
+# 6. Relationships X and Y
+```{r}
+p <- ggplot(df, aes(x=province, y=length)) +
+  geom_boxplot()
+p
+
+p <- ggplot(df, aes(x=province, y=abundance)) +
+  geom_boxplot()
+p
+```
+
+
+# 7. Interactions
+
+```{r}
+
+coplot(length ~ abundance | province ,
+       data=df,
+       panel=function(x,y,...) {
+         panel.smooth(x,y,span=0.8,iter=5,...)
+         abline(lm(y ~ x), col="blue") } )
+```
+There seems to be no interaction in Provinces. 
+
+# 8. Independence of Y
+Both length and density could be dependent on Province because of fishing pressure effects. 
+
+
+## Indices
+# Data setup
+We'll need to create an abundance matrix in order to calculate indices.
+
+```{r}
+#Let's create a dataframe for our indices.
+#We only need abundance
+
 # first, we'll summarise species disregarding length
 # we'll use two different matrices: one for species and one for taxa
 # not all organisms were identified to species level
 # taxa for invertebrates is ranked down to class, subclass or order. for fish, taxa equals family.
-
-df_sp <- df %>% select(province, locality, transect, sp, abundance)
+ 
+df_sp <- df %>% select(province, locality, siteref, transect, sp, abundance)
 head(df_sp)
 str(df_sp)
-df_sp <- summarise(group_by(df_sp, province, locality, transect, sp),
+df_sp <- summarise(group_by(df_sp, province, locality, siteref, transect, sp),
                         sum_abundance = sum(abundance, na.rm = TRUE))
 
+# ab_sp contains abundance matrix for ecological indices
+# we'll create it out of df; as we don't care for sizes, we'll sum all abundances for each species on for province, site and transect
+ab_sp  <- pivot_wider(df_sp, names_from = sp, values_from = sum_abundance)
+#converting these factors to numeric will solve an issue that could arise later when we're creating our indices
+ab_sp$province <- as.double(ab_sp$province) 
+ab_sp$locality <- as.double(ab_sp$locality)
+ab_sp$siteref <-as.double(ab_sp$siteref)
+ab_sp$transect <- as.double(ab_sp$transect)
 
-# let's set up the data so that we can create our matrices 
-preab_sp  <- pivot_wider(df_sp, names_from = sp, values_from = sum_abundance)
-
-# now we can set up our matrices. 
-ab_sp <- df1[, 2:118] 
-
-# not sure if necessary but let's convert na to zeroes
+# let's convert na to zeroes
 ab_sp[is.na(ab_sp)] <-0 
-
-
-#let's just take a look at our data before going on
-boxplot(df_sp$sum_abundance)
-
-dotchart(df_sp$sum_abundance)
 
 ```
 
-
-
-## Indices
-
+# Now we can obtain ecological indices
 ```{r}
-
-#Let's create a dataframe for our indices.
-#We only need abundance
-
-ind_sp <- as.data.frame(df1[, "transect"])
+#We'll create a dataframe to store our results
+ind_sp <- ab_sp[, c("province", "locality", "siteref", "transect")]
 
 # Richness: number of species per transect/habitat
 ind_sp$richness <- rowSums(ab_sp>0)
 
-
 # Shannon´s diversity index: the bigger, the more diverse, basically 
 ind_sp$Shannon <- diversity(ab_sp) 
 
-
 # Rarefaction
-ind_sp$Rarefied <- c(rarefy(ab_sp[1:35,], sample=15))
+ind_sp$Rarefied <- c(rarefy(ab_sp[1:35,], sample=raremax))
+raremax <- min(rowSums(ab_sp>0))
 
-# Also visualize a rarefaction curve
-rarecurve(ab_sp)
-
+# Let's also visualize a rarefaction curve
+#this function will create a rarefaction curve to observe species accumulation 
+rarecurve(ab_sp, sample = raremax, col=viridis(raremax, alpha = 1, begin = 0, end = 1, direction = 1, option = "D"), lwd=2.7)
 ```
 
 
+# Visualization!
+We'll use boxplots to see  differences in species diversity:
+
+```{r}
+#let's return our province/location/sites to factors
+par(mfrow=c(1,2))
+boxplot(richness~province, data=ind_sp, boxwex=0.5, col=viridis(35), 
+        cex.axis=0.5, ylab="Richness")
+boxplot(richness~siteref, data=ind_sp, boxwex=0.5, col=viridis(35), 
+        cex.axis=0.5, ylab="Richness")
+boxplot(Shannon~province, data=ind_sp, boxwex=0.5, col=viridis(35), 
+        cex.axis=0.5, ylab="Shannon diversity")
+boxplot(Shannon~siteref, data=ind_sp, boxwex=0.5, col=viridis(35), 
+        cex.axis=0.5, ylab="Shannon diversity")
+boxplot(Rarefied~province, data=ind_sp, boxwex=0.5, col=viridis(35), 
+        cex.axis=0.5, ylab="Rarefied richness")
+boxplot(Rarefied~siteref, data=ind_sp, boxwex=0.5, col=viridis(35), 
+        cex.axis=0.5, ylab="Rarefied richness")
+
+mfrow=c(1,1)
+```
+
+## Some linear modeling
+
+It appears that species diversity increases as we move from the field to the forest. We can test for differences among habitats statistically using a linear model, with Habitat as a predictor of species diversity:
+
+```{r}
+# fit linear models (ANOVA)
+mod.richness.province <- lm(richness~province, data=ind_sp)
+mod.richness.siteref <- lm(richness~siteref, data=ind_sp)
+
+mod.Shannon.province <- lm(richness~province, data=ind_sp)
+mod.Shannon.siteref <- lm(richness~siteref, data=ind_sp)
+
+mod.Rarefied.province <- lm(richness~province, data=ind_sp)
+mod.Rarefied.siteref <- lm(richness~siteref, data=ind_sp)
+
+anova(mod.richness.province)
+anova(mod.richness.siteref) 
+
+anova(mod.Shannon.province)
+anova(mod.Shannon.siteref) 
+
+anova(mod.Rarefied.province)
+anova(mod.Rarefied.siteref)
+``

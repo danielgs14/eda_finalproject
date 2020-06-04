@@ -33,31 +33,13 @@ source("./functions/6003Functions.R")
 Here, steps for tidying the dataset will be presented. Raw data was taken during completion of underwater transects, then input in Excel. Data will be imported as a .csv file.  
 
 ```{r}
-#df <- read.csv("./data/df_daniel.csv")
-df <- read.csv("./data/df_rev_transects.csv")
-
-
 df <- read.csv("./data/df_daniel.csv")
+# We'll only need provinces, localities, transects, species, length and abundances
+df <- df %>% select(province, locality, transect, sp, length, abundance)
 
-#df contains data for analysis
-head(df)
-tail(df)
+head(df, n=3L)
+tail(df, n=3L)
 str(df)
-range(df$Talla_.cm.)
-range(df$Abundancia)
-range(df$Densidad_.org.m2.)
-
-# ab_matrix contains abundance matrix for ecological indices
-# we'll create it out of df; as we don't care for sizes, we'll sum all abundances for each species on each site
-
-df_temp <- df %>% select(Provincia, Localidad, SitioCodigo, Especie, Abundancia)
-head(df_temp)
-str(df_temp)
-df_temp <- summarise(group_by(df_temp, Provincia, Localidad, SitioCodigo, Especie),
-                        sum_abundancia = sum(Abundancia, na.rm = TRUE))
-view(df_temp)
-
-
 
 ```
 
@@ -69,9 +51,9 @@ We are going to see visual representation of data.
 
 # 1. Outliers 
 
-```{r}
-boxplot(df$Talla_.cm.)
-boxplot(df$Abundancia)
+```{r, include=FALSE}
+boxplot(df$length)
+boxplot(df$abundance)
 boxplot(df$Densidad_.org.m2.)
 
 dotchart(df$Talla_.cm.)
@@ -83,7 +65,7 @@ Many outliers, but there are no errors on data.
 
 # 2. Homogeneity of variance 
 
-```{r}
+```{r, include=FALSE}
 p <- ggplot(data=df, aes(X=Provincia, y=Talla_.cm.)) +
   geom_boxplot() + facet_wrap(~SitioCodigo)
 p
@@ -96,14 +78,12 @@ There is homogeneity of variance.
 
 # 3. Normality 
 
-```{r}
+```{r, include=FALSE}
+hist(df$length)
+hist(df$abundance)
 
-hist(df$Talla_.cm.)
-hist(df$Abundancia)
-hist(df$Densidad_.org.m2.)
-
-qqnorm(df$Talla_.cm.)
-qqline(df$Talla_.cm.)
+qqnorm(df$length)
+qqline(df$abundance)
 
 qqnorm(df$Abundancia)
 qqline(df$Abundancia)
