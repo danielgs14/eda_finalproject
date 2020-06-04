@@ -34,6 +34,7 @@ Here, steps for tidying the dataset will be presented. Raw data was taken during
 
 ```{r}
 df <- read.csv("./data/df_daniel.csv")
+df1 <- read.csv("D:/UABC/II_Semestre/Datos_R/backup_project/data/apoyo.csv")
 
 
 #df contains data for analysis
@@ -50,44 +51,29 @@ range(df$abundance)
 # not all organisms were identified to species level
 # taxa for invertebrates is ranked down to class, subclass or order. for fish, taxa equals family.
 
-df_sp <- df %>% select(province, locality, transect, vert_invert, taxa, sp, sp_code, abundance)
+df_sp <- df %>% select(province, locality, transect, sp, abundance)
 head(df_sp)
 str(df_sp)
-df_sp <- summarise(group_by(df_sp, province, locality, transect, sp, sp_code),
-                        sum_abundance = sum(abundance, na.rm = TRUE))
-
-df_taxa <- df %>% select(province, locality, transect, vert_invert, taxa, abundance)
-head(df_taxa)
-str(df_taxa)
-df_taxa <- summarise(group_by(df_taxa, province, locality, transect, taxa),
+df_sp <- summarise(group_by(df_sp, province, locality, transect, sp),
                         sum_abundance = sum(abundance, na.rm = TRUE))
 
 
-# let's set up the data so that we can create our matrices
+# let's set up the data so that we can create our matrices 
 preab_sp  <- pivot_wider(df_sp, names_from = sp, values_from = sum_abundance)
-preab_sp <- column_to_rownames(preab_sp, var="transect")
-preab_taxa  <- pivot_wider(df_taxa, names_from = taxa, values_from = sum_abundance)
 
-ab_sp <- preab_sp[, 5:121] 
-
-ab_taxa <- preab_taxa[, 5:50]
+# now we can set up our matrices. 
+ab_sp <- df1[, 2:118] 
 
 # not sure if necessary but let's convert na to zeroes
-#ab_sp[is.na(ab_sp)] <-0 
-#ab_taxa[is.na(ab_taxa)] <-0 
+ab_sp[is.na(ab_sp)] <-0 
 
 
 #let's just take a look at our data before going on
 boxplot(df_sp$sum_abundance)
-boxplot(df_taxa$sum_abundance)
 
 dotchart(df_sp$sum_abundance)
-dotchart(df_taxa$sum_abundance)
-
 
 ```
-
-Everything looks good. Data was already in long format before importing it. 
 
 
 
@@ -96,22 +82,20 @@ Everything looks good. Data was already in long format before importing it.
 ```{r}
 
 #Let's create a dataframe for our indices.
-#We need to use only abundance
+#We only need abundance
 
-ind_sp <- preab_sp[,c("province","locality","transect")]
-ind_taxa <- preab_taxa[,c("province","locality","transect")]
+ind_sp <- as.data.frame(df1[, "transect"])
 
 # Richness: number of species per transect/habitat
-ind_sp$Richness <- rowSums(ab_sp>0)
-ind_taxa$Richness <- rowSums(ab_taxa>0)
+ind_sp$richness <- rowSums(ab_sp>0)
+
 
 # Shannon´s diversity index: the bigger, the more diverse, basically 
 ind_sp$Shannon <- diversity(ab_sp) 
-ind_taxa$Shannon <- diversity(ab_taxa)
+
 
 # Rarefaction
-ind_sp$Rarefied <- c(rarefy(ab_sp[1:1170,], sample=15))
-ind_taxa$Rarefied <- c(rarefy(ab_taxa[1:46,], sample=15))
+ind_sp$Rarefied <- c(rarefy(ab_sp[1:35,], sample=15))
 
 # Also visualize a rarefaction curve
 rarecurve(ab_sp)
