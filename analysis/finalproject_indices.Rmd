@@ -1,0 +1,121 @@
+---
+title: "Final project"
+author: "Daniel Gonzalez-Suarez"
+date: "4/3/2020"
+output: 
+  pdf_document: 
+    toc: yes
+  html_document: 
+    theme: united
+    toc: yes
+editor options:
+  chunk_output_style: console
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Part II, Final Assignment
+This is the second assingment for the Ecological Data Analysis in R course. In order to start, packages and functions will be loaded first.
+```{r, include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(vegan)
+library(viridis) #just in case. For ggplot, use scale_color_viridis() and scale_fill_viridis() magma, plasma, inferno, viridis
+source("./functions/6003Functions.R")
+```
+
+## Loading data and tidying it up.
+
+Here, steps for tidying the dataset will be presented. Raw data was taken during completion of underwater transects, then input in Excel. Data will be imported as a .csv file.  
+
+```{r}
+df <- read.csv("./data/df_daniel.csv")
+
+
+#df contains data for analysis
+head(df)
+tail(df)
+str(df)
+range(df$abundance)
+
+
+# ab_matrix contains abundance matrix for ecological indices
+# we'll create it out of df; as we don't care for sizes, we'll sum all abundances for each species on for province, site and transect
+# first, we'll summarise species disregarding length
+# we'll use two different matrices: one for species and one for taxa
+# not all organisms were identified to species level
+# taxa for invertebrates is ranked down to class, subclass or order. for fish, taxa equals family.
+
+df_sp <- df %>% select(province, locality, transect, vert_invert, taxa, sp, sp_code, abundance)
+head(df_sp)
+str(df_sp)
+df_sp <- summarise(group_by(df_sp, province, locality, transect, sp, sp_code),
+                        sum_abundance = sum(abundance, na.rm = TRUE))
+
+df_taxa <- df %>% select(province, locality, transect, vert_invert, taxa, abundance)
+head(df_taxa)
+str(df_taxa)
+df_taxa <- summarise(group_by(df_taxa, province, locality, transect, taxa),
+                        sum_abundance = sum(abundance, na.rm = TRUE))
+
+
+# let's set up the data so that we can create our matrices
+preab_sp  <- pivot_wider(df_sp, names_from = sp, values_from = sum_abundance)
+preab_sp <- column_to_rownames(preab_sp, var="transect")
+preab_taxa  <- pivot_wider(df_taxa, names_from = taxa, values_from = sum_abundance)
+
+ab_sp <- preab_sp[, 5:121] 
+
+ab_taxa <- preab_taxa[, 5:50]
+
+# not sure if necessary but let's convert na to zeroes
+#ab_sp[is.na(ab_sp)] <-0 
+#ab_taxa[is.na(ab_taxa)] <-0 
+
+
+#let's just take a look at our data before going on
+boxplot(df_sp$sum_abundance)
+boxplot(df_taxa$sum_abundance)
+
+dotchart(df_sp$sum_abundance)
+dotchart(df_taxa$sum_abundance)
+
+
+```
+
+Everything looks good. Data was already in long format before importing it. 
+
+
+
+## Indices
+
+```{r}
+
+#Let's create a dataframe for our indices.
+#We need to use only abundance
+
+ind_sp <- preab_sp[,c("province","locality","transect")]
+ind_taxa <- preab_taxa[,c("province","locality","transect")]
+
+# Richness: number of species per transect/habitat
+ind_sp$Richness <- rowSums(ab_sp>0)
+ind_taxa$Richness <- rowSums(ab_taxa>0)
+
+# Shannon´s diversity index: the bigger, the more diverse, basically 
+ind_sp$Shannon <- diversity(ab_sp) 
+ind_taxa$Shannon <- diversity(ab_taxa)
+
+# Rarefaction
+ind_sp$Rarefied <- c(rarefy(ab_sp[1:1170,], sample=15))
+ind_taxa$Rarefied <- c(rarefy(ab_taxa[1:46,], sample=15))
+
+# Also visualize a rarefaction curve
+rarecurve(ab_sp)
+
+```
+
+
